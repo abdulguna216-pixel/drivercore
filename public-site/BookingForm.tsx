@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { ArrowUpRight, CheckCircle2, Paperclip, ShieldCheck } from 'lucide-react';
 import { Button, Field, Select, Textarea, ErrorState } from '../frontend/src/components/UI';
-import { api, ApiError } from '../frontend/src/services/api';
+import { send, ApiError } from '../frontend/src/services/api';
 import type { Service } from '../frontend/src/services/types';
 import { localDate } from '../frontend/src/utils/format';
 export default function BookingForm({
@@ -28,6 +28,7 @@ export default function BookingForm({
       return;
     }
     data.delete('consent');
+    if (!internal) data.set('source', 'website');
     for (const key of ['year', 'mileage', 'licensePlate', 'preferredDate', 'comment'])
       if (data.get(key) === '') data.delete(key);
     const files = (form.elements.namedItem('files') as HTMLInputElement).files;
@@ -37,10 +38,7 @@ export default function BookingForm({
     setError('');
     setFields({});
     try {
-      const result = await api<{ id: number }>('/requests', {
-        method: 'POST',
-        body: data,
-      });
+      const result = await send<{ id: number }>('/requests', data);
       setSuccess(result.id);
       onSuccess?.();
     } catch (e) {

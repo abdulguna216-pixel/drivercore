@@ -535,6 +535,40 @@ test('DRIVECORE: full lifecycle, persistence, permissions and concurrency', asyn
         );
       },
     );
+    await t.test('Browser transport submits FormData to cloud-configured API without multipart', async () => {
+      const originalFetch = globalThis.fetch;
+      const originalBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
+      const cookies = new Map<string, string>();
+      process.env.BLOB_READ_WRITE_TOKEN = 'test-only-cloud-configuration';
+      // Exercise the browser client against the real local API with a cookie jar.
+      globalThis.fetch = async (input, init) => {
+        if (/^https?:/.test(String(input))) return originalFetch(input, init);
+        const headers = new Headers(init?.headers);
+        headers.set('Origin', 'http://localhost:5173');
+        headers.set('Cookie', [...cookies].map(([name, value]) => `${name}=${value}`).join('; '));
+        const relative = String(input).replace(/^\/api/, '');
+        const response = await originalFetch(base + relative, { ...init, headers });
+        for (const value of response.headers.getSetCookie()) {
+          const [name, ...rest] = value.split(';')[0].split('=');
+          cookies.set(name, rest.join('='));
+        }
+        return response;
+      };
+      try {
+        const { send } = await import('../frontend/src/services/api.js');
+        const form = new FormData();
+        for (const [name, value] of Object.entries({ name: 'Cloud transport test', phone: '+19990000001', carBrand: 'Test', carModel: 'Cloud form', serviceId: service.id, source: 'website' })) form.set(name, value);
+        const result = await send<{ id: number }>('/requests', form);
+        const saved = await db.request.findUniqueOrThrow({ where: { id: result.id } });
+        assert.equal(saved.source, 'website');
+        assert.equal(saved.status, 'NEW');
+        assert.equal((await call(`/requests/${saved.id}`)).status, 200);
+      } finally {
+        globalThis.fetch = originalFetch;
+        if (originalBlobToken === undefined) delete process.env.BLOB_READ_WRITE_TOKEN;
+        else process.env.BLOB_READ_WRITE_TOKEN = originalBlobToken;
+      }
+    });
     await t.test('Security regressions: CSRF, dates, byte limits, upload bounds and alerts', async () => {
       const { readdirSync } = await import('node:fs');
       assert.equal((await fetch(base + '/auth/logout', { method: 'POST', headers: { Cookie: adminCookie } })).status, 403);
