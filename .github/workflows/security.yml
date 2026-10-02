@@ -27,7 +27,7 @@ jobs:
       SEED_ADMIN_PASSWORD: ci-only-isolated-admin-password
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.25.0
       - uses: actions/setup-node@v5
