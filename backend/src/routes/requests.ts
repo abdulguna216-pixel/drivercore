@@ -4,7 +4,10 @@ import { Prisma } from '@prisma/client';
 import { limit } from '../middleware/rate-limit.js';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import { get as getBlob } from '@vercel/blob';
+import { unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { get as getBlob, del as deleteBlob } from '@vercel/blob';
+import { audit } from '../services/security.js';
 import { consumeTickets } from '../services/blob.js';
 import { db } from '../utils/db.js';
 import { auth, roles, requestAccess } from '../middleware/auth.js';
@@ -27,7 +30,8 @@ requestsRouter.post(
   (req, _res, next) => req.user?.role === 'MECHANIC' ? next(new HttpError(403, 'Создание заявок доступно менеджеру.')) : next(),
   upload,
   asyncRoute(async (req, res) => {
-    const files = (req.files || []) as Express.Multer.File[];
+    if (req.files && !Array.isArray(req.files)) throw new HttpError(400, 'Некорректный список файлов.');
+    const files = Array.isArray(req.files) ? req.files : [];
     try {
       await verifyFiles(files, !req.user);
       const raw = { ...req.body };
@@ -252,13 +256,35 @@ requestsRouter.delete(
   asyncRoute(async (req, res) => {
     const requestId = id.parse(req.params.id);
     await requestAccess(req, requestId);
-    await db.$transaction(async (tx) => {
+    const removedFiles = await db.$transaction(async (tx) => {
       await lockRequest(tx, requestId);
       if (await tx.workOrder.findUnique({ where: { requestId } }))
         throw new HttpError(409, 'У заявки есть заказ-наряд. Используйте статус «Отменена».');
+      const files = await tx.file.findMany({ where: { requestId } });
+      // Keep deleted cloud files in the quota until physical deletion succeeds.
+      // An expired ticket lets maintenance retry if storage is temporarily unavailable.
+      for (const file of files.filter((item) => item.fileUrl.startsWith('https://'))) {
+        const pathname = decodeURIComponent(new URL(file.fileUrl).pathname.slice(1));
+        await tx.uploadTicket.upsert({
+          where: { pathname },
+          create: { id: randomUUID(), ownerKey: 'cleanup', pathname, fileName: file.fileName, fileType: file.fileType, fileSize: file.fileSize, fileUrl: file.fileUrl, expiresAt: new Date(0) },
+          update: { usedAt: null, expiresAt: new Date(0) },
+        });
+      }
       await log(tx, requestId, req.user!.id, 'DELETED', `Удалена заявка #${requestId}`);
       await tx.request.delete({ where: { id: requestId } });
+      return files;
     });
+    for (const file of removedFiles) {
+      try {
+        if (file.fileUrl.startsWith('https://')) {
+          await deleteBlob(file.fileUrl);
+          await db.uploadTicket.deleteMany({ where: { fileUrl: file.fileUrl, usedAt: null, expiresAt: { lt: new Date() } } });
+        } else {
+          await unlink(path.join(uploadDir, path.basename(file.fileUrl))).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+        }
+      } catch { await audit(req, 'SERVER_ERROR', String(requestId), 500); }
+    }
     res.json({ ok: true });
   }),
 );
@@ -314,7 +340,8 @@ requestsRouter.post(
   asyncRoute(async (req, _res, next) => { await requestAccess(req, id.parse(req.params.id)); next(); }),
   upload,
   asyncRoute(async (req, res) => {
-    const files = (req.files || []) as Express.Multer.File[];
+    if (req.files && !Array.isArray(req.files)) throw new HttpError(400, 'Некорректный список файлов.');
+    const files = Array.isArray(req.files) ? req.files : [];
     try {
       const requestId = id.parse(req.params.id);
       await requestAccess(req, requestId);

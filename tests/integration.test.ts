@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
 import { prepareTestDb } from './test-db.js';
 import type {
   RequestRecord,
@@ -458,6 +459,12 @@ test('DRIVECORE: full lifecycle, persistence, permissions and concurrency', asyn
       assert.equal(saved.serviceId, service.id);
       assert.equal(saved.files.length, 1);
       assert.equal(saved.source, 'website');
+      const storedPath = path.join(process.env.UPLOAD_DIR!, saved.files[0].fileUrl);
+      assert.equal(existsSync(storedPath), true);
+      assert.equal((await call(`/requests/${saved.id}`, undefined, 'DELETE')).status, 200);
+      assert.equal(await db.file.count({ where: { requestId: saved.id } }), 0);
+      assert.equal(existsSync(storedPath), false);
+      assert.equal((await call(`/files/${saved.files[0].id}/download`)).status, 404);
     });
     await t.test(
       'Administrative configuration, negative prices, origin and JSON validation',

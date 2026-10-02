@@ -22,6 +22,7 @@ export const jwtSecret = process.env.JWT_SECRET;
 if (!jwtSecret || jwtSecret.length < 32)
   throw new Error('JWT_SECRET must contain at least 32 characters. Configure .env.');
 export async function identify(req: Request, _res: Response, next: NextFunction) {
+  // Public endpoints permit anonymous visitors; auth/roles enforce protected routes.
   try {
     const token = req.cookies?.drivecore_session;
     if (token) {

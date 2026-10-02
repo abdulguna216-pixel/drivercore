@@ -3,6 +3,8 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import { rateLimit } from 'express-rate-limit';
+import { limit } from './middleware/rate-limit.js';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -81,6 +83,10 @@ app.use((req, _res, next) => {
   }
   next();
 });
+// Fast per-instance protection also covers static files and health checks.
+app.use(rateLimit({ windowMs: 60_000, limit: 1200, standardHeaders: 'draft-8', legacyHeaders: false, message: { message: 'Слишком много запросов. Повторите позже.' } }));
+// The database counter is shared by all serverless instances.
+app.use('/api', limit('api', 600, 60_000));
 app.use(express.json({ limit: '256kb' }), cookieParser());
 app.get(
   '/api/health',

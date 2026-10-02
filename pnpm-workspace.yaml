@@ -1,6 +1,9 @@
 packages:
   - '.'
 verifyDepsBeforeRun: false
+overrides:
+  deepmerge-ts: 8.0.0
+  effect: 3.20.0
 allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
