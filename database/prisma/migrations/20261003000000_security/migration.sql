@@ -1,0 +1,13 @@
+ALTER TABLE "User" ADD COLUMN "sessionVersion" INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE "Session" ("id" TEXT PRIMARY KEY, "userId" TEXT NOT NULL REFERENCES "User"("id") ON DELETE CASCADE, "expiresAt" TIMESTAMP(3) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "Session_userId_idx" ON "Session"("userId");
+CREATE INDEX "Session_expiresAt_idx" ON "Session"("expiresAt");
+CREATE TABLE "SecurityEvent" ("id" TEXT PRIMARY KEY, "type" TEXT NOT NULL, "actorId" TEXT, "targetId" TEXT, "fingerprint" TEXT NOT NULL, "requestId" TEXT NOT NULL, "status" INTEGER, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "SecurityEvent_type_createdAt_idx" ON "SecurityEvent"("type", "createdAt");
+CREATE INDEX "SecurityEvent_fingerprint_createdAt_idx" ON "SecurityEvent"("fingerprint", "createdAt");
+CREATE TABLE "SecurityAlert" ("id" TEXT PRIMARY KEY, "key" TEXT UNIQUE NOT NULL, "type" TEXT NOT NULL, "severity" TEXT NOT NULL, "count" INTEGER NOT NULL DEFAULT 1, "acknowledgedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL);
+CREATE INDEX "SecurityAlert_createdAt_idx" ON "SecurityAlert"("createdAt");
+CREATE TABLE "RateBucket" ("key" TEXT PRIMARY KEY, "count" INTEGER NOT NULL DEFAULT 1, "expiresAt" TIMESTAMP(3) NOT NULL);
+CREATE INDEX "RateBucket_expiresAt_idx" ON "RateBucket"("expiresAt");
+CREATE TABLE "UploadTicket" ("id" TEXT PRIMARY KEY, "ownerKey" TEXT NOT NULL, "requestId" INTEGER, "pathname" TEXT UNIQUE NOT NULL, "fileName" TEXT NOT NULL, "fileType" TEXT NOT NULL, "fileSize" INTEGER NOT NULL, "fileUrl" TEXT, "verifiedAt" TIMESTAMP(3), "usedAt" TIMESTAMP(3), "expiresAt" TIMESTAMP(3) NOT NULL, "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX "UploadTicket_expiresAt_usedAt_idx" ON "UploadTicket"("expiresAt", "usedAt");

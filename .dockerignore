@@ -1,0 +1,11 @@
+node_modules
+.env
+.env.*
+.runtime
+.git
+dist
+dist-server
+tests/artifacts
+backend/uploads/*
+docs/generated-assets.json
+.DS_Store

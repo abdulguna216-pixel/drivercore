@@ -1,0 +1,52 @@
+name: Security and regression checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: drivecore
+          POSTGRES_PASSWORD: ci-only-isolated-password
+          POSTGRES_DB: drivecore
+        ports: ['5432:5432']
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://drivecore:ci-only-isolated-password@127.0.0.1:5432/drivecore
+      JWT_SECRET: ci-only-isolated-secret-not-used-in-any-deployment-2026
+      SEED_ADMIN_EMAIL: admin@example.test
+      SEED_ADMIN_PASSWORD: ci-only-isolated-admin-password
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm build
+      - run: pnpm test
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v4

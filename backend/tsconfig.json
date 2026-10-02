@@ -1,0 +1,1 @@
+{"extends":"../tsconfig.json","compilerOptions":{"noEmit":false,"outDir":"../dist-server","module":"NodeNext","moduleResolution":"NodeNext","types":["node"]},"include":["src","../shared"],"exclude":["../frontend","../crm","../public-site","../tests"]}

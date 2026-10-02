@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: drivecore
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: drivecore
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drivecore -d drivecore"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+  backend:
+    build:
+      context: .
+      target: backend
+    environment:
+      DATABASE_URL: postgresql://drivecore:${POSTGRES_PASSWORD}@postgres:5432/drivecore
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@drivecore.local}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?Set SEED_ADMIN_PASSWORD in .env}
+      APP_ORIGIN: ${DOCKER_APP_ORIGIN:-http://localhost:8080,http://127.0.0.1:8080}
+      NODE_ENV: ${DOCKER_NODE_ENV:-development}
+      TRUST_PROXY: '1'
+      HOST: 0.0.0.0
+      PORT: 4000
+      UPLOAD_DIR: /app/backend/uploads
+      TZ: Europe/Moscow
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - uploads:/app/backend/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+  frontend:
+    build:
+      context: .
+      target: frontend
+    ports:
+      - "127.0.0.1:8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+volumes:
+  postgres_data:
+  uploads:

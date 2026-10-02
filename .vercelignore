@@ -1,0 +1,11 @@
+.env
+.env.*
+.runtime
+.git
+.github
+tests
+docs
+backend/uploads
+node_modules
+.pnpm-store
+dist-server

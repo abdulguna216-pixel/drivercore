@@ -1,0 +1,282 @@
+generator client {
+ provider = "prisma-client-js"
+}
+datasource db {
+ provider = "postgresql"
+ url = env("DATABASE_URL")
+}
+enum Role {
+ ADMIN
+ MANAGER
+ MECHANIC
+}
+enum RequestStatus {
+ NEW
+ CONTACTED
+ SCHEDULED
+ IN_PROGRESS
+ READY
+ COMPLETED
+ CANCELLED
+}
+enum Source {
+ website
+ phone
+ telegram
+ manual
+}
+enum TaskStatus {
+ NEW
+ IN_PROGRESS
+ DONE
+}
+enum ItemKind {
+ LABOR
+ PART
+}
+enum PaymentMethod {
+ CASH
+ CARD
+ TRANSFER
+}
+model User {
+ id String @id @default(cuid())
+ email String @unique
+ name String
+ passwordHash String
+ sessionVersion Int @default(0)
+ role Role
+ active Boolean @default(true)
+ createdAt DateTime @default(now())
+ managedRequests Request[] @relation("Manager")
+ mechanicRequests Request[] @relation("Mechanic")
+ appointments Appointment[]
+ tasks Task[]
+ comments Comment[]
+ activities ActivityLog[]
+ notifications Notification[]
+ payments Payment[]
+ sessions Session[]
+}
+model Session {
+ id String @id
+ userId String
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ expiresAt DateTime
+ createdAt DateTime @default(now())
+ @@index([userId])
+ @@index([expiresAt])
+}
+model SecurityEvent {
+ id String @id @default(cuid())
+ type String
+ actorId String?
+ targetId String?
+ fingerprint String
+ requestId String
+ status Int?
+ createdAt DateTime @default(now())
+ @@index([type,createdAt])
+ @@index([fingerprint,createdAt])
+}
+model SecurityAlert {
+ id String @id @default(cuid())
+ key String @unique
+ type String
+ severity String
+ count Int @default(1)
+ acknowledgedAt DateTime?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@index([createdAt])
+}
+model RateBucket {
+ key String @id
+ count Int @default(1)
+ expiresAt DateTime
+ @@index([expiresAt])
+}
+model UploadTicket {
+ id String @id
+ ownerKey String
+ requestId Int?
+ pathname String @unique
+ fileName String
+ fileType String
+ fileSize Int
+ fileUrl String?
+ verifiedAt DateTime?
+ usedAt DateTime?
+ expiresAt DateTime
+ createdAt DateTime @default(now())
+ @@index([expiresAt,usedAt])
+}
+model Client {
+ id String @id @default(cuid())
+ name String
+ phone String @unique
+ email String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ cars Car[]
+ requests Request[]
+ workOrders WorkOrder[]
+}
+model Car {
+ id String @id @default(cuid())
+ clientId String
+ client Client @relation(fields:[clientId],references:[id])
+ brand String
+ model String
+ year Int?
+ vin String? @unique
+ licensePlate String?
+ mileage Int?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ requests Request[]
+ workOrders WorkOrder[]
+ @@index([clientId])
+}
+model Service {
+ id String @id @default(cuid())
+ name String @unique
+ description String
+ price Decimal @db.Decimal(12,2)
+ duration Int @default(60)
+ active Boolean @default(true)
+ requests Request[]
+}
+model Request {
+ id Int @id @default(autoincrement())
+ clientId String
+ client Client @relation(fields:[clientId],references:[id])
+ carId String
+ car Car @relation(fields:[carId],references:[id])
+ serviceId String
+ service Service @relation(fields:[serviceId],references:[id])
+ status RequestStatus @default(NEW)
+ source Source @default(website)
+ preferredDate DateTime? @db.Date
+ comment String @default("")
+ managerId String?
+ manager User? @relation("Manager",fields:[managerId],references:[id])
+ mechanicId String?
+ mechanic User? @relation("Mechanic",fields:[mechanicId],references:[id])
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ appointment Appointment?
+ tasks Task[]
+ comments Comment[]
+ files File[]
+ activities ActivityLog[]
+ workOrder WorkOrder?
+ notifications Notification[]
+ @@index([status,createdAt])
+ @@index([mechanicId])
+}
+model Appointment {
+ id String @id @default(cuid())
+ requestId Int @unique
+ request Request @relation(fields:[requestId],references:[id],onDelete:Cascade)
+ mechanicId String
+ mechanic User @relation(fields:[mechanicId],references:[id])
+ startsAt DateTime @db.Timestamptz(3)
+ endsAt DateTime @db.Timestamptz(3)
+ cancelled Boolean @default(false)
+ createdAt DateTime @default(now())
+ @@index([startsAt])
+}
+model Task {
+ id String @id @default(cuid())
+ requestId Int
+ request Request @relation(fields:[requestId],references:[id],onDelete:Cascade)
+ title String
+ assigneeId String
+ assignee User @relation(fields:[assigneeId],references:[id])
+ dueAt DateTime
+ status TaskStatus @default(NEW)
+ createdAt DateTime @default(now())
+}
+model Comment {
+ id String @id @default(cuid())
+ requestId Int
+ request Request @relation(fields:[requestId],references:[id],onDelete:Cascade)
+ userId String
+ user User @relation(fields:[userId],references:[id])
+ text String
+ createdAt DateTime @default(now())
+}
+model File {
+ id String @id @default(cuid())
+ requestId Int
+ request Request @relation(fields:[requestId],references:[id],onDelete:Cascade)
+ fileName String
+ fileUrl String
+ fileType String
+ fileSize Int
+ uploadedAt DateTime @default(now())
+}
+model WorkOrder {
+ id Int @id @default(autoincrement())
+ requestId Int @unique
+ request Request @relation(fields:[requestId],references:[id])
+ clientId String
+ client Client @relation(fields:[clientId],references:[id])
+ carId String
+ car Car @relation(fields:[carId],references:[id])
+ status RequestStatus @default(IN_PROGRESS)
+ subtotal Decimal @default(0) @db.Decimal(12,2)
+ total Decimal @default(0) @db.Decimal(12,2)
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ items WorkOrderItem[]
+ payments Payment[]
+}
+model WorkOrderItem {
+ id String @id @default(cuid())
+ workOrderId Int
+ workOrder WorkOrder @relation(fields:[workOrderId],references:[id],onDelete:Cascade)
+ kind ItemKind
+ name String
+ quantity Decimal @db.Decimal(10,2)
+ price Decimal @db.Decimal(12,2)
+}
+model Payment {
+ id String @id @default(cuid())
+ workOrderId Int
+ workOrder WorkOrder @relation(fields:[workOrderId],references:[id])
+ userId String
+ user User @relation(fields:[userId],references:[id])
+ amount Decimal @db.Decimal(12,2)
+ method PaymentMethod
+ createdAt DateTime @default(now())
+}
+model ActivityLog {
+ id String @id @default(cuid())
+ userId String?
+ user User? @relation(fields:[userId],references:[id])
+ requestId Int?
+ request Request? @relation(fields:[requestId],references:[id],onDelete:SetNull)
+ type String
+ description String
+ createdAt DateTime @default(now())
+}
+model Notification {
+ id String @id @default(cuid())
+ userId String
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+ requestId Int
+ request Request @relation(fields:[requestId],references:[id],onDelete:Cascade)
+ title String
+ readAt DateTime?
+ createdAt DateTime @default(now())
+}
+model Setting {
+ id String @id @default("main")
+ name String @default("DRIVECORE")
+ phone String @default("+7 (495) 120-40-50")
+ address String @default("Москва, ул. Автозаводская, 23")
+ hours String @default("Ежедневно · 09:00–21:00")
+ email String @default("hello@drivecore.local")
+}
