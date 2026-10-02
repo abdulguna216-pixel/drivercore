@@ -1,0 +1,14 @@
+node_modules/
+.pnpm-store/
+.env
+.env.*
+!.env.example
+.runtime/
+backend/uploads/*
+!backend/uploads/.gitkeep
+dist/
+dist-server/
+*.log
+tests/artifacts/
+.DS_Store
+.vercel
