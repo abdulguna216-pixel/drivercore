@@ -133,6 +133,17 @@ test('DRIVECORE: full lifecycle, persistence, permissions and concurrency', asyn
         403,
       );
     });
+    await t.test('Incomplete and oversized phones never create requests; client editing uses the same rules', async () => {
+      const count = await db.request.count();
+      for (const phone of ['+7 (912) 345-67-8_', '+791234567890', '+19123456789']) {
+        assert.equal((await call('/requests', { name: 'Invalid phone', phone, carBrand: 'Test', carModel: 'Test', serviceId: service.id }, 'POST', '')).status, 400);
+        assert.equal((await call(`/clients/${clientId}`, { phone }, 'PATCH')).status, 400);
+      }
+      assert.equal(await db.request.count(), count);
+      assert.equal((await db.client.findUniqueOrThrow({ where: { id: clientId } })).phone, '+79990000000');
+      assert.equal((await call(`/clients/${clientId}`, { phone: '8 (999) 000-00-00' }, 'PATCH')).status, 200);
+      assert.equal((await db.client.findUniqueOrThrow({ where: { id: clientId } })).phone, '+79990000000');
+    });
     await t.test('Backend rejects missing fields, invalid dates and negative values', async () => {
       assert.equal((await call('/requests', { name: '', phone: 'bad' }, 'POST', '')).status, 400);
       assert.equal(
@@ -557,7 +568,7 @@ test('DRIVECORE: full lifecycle, persistence, permissions and concurrency', asyn
       try {
         const { send } = await import('../frontend/src/services/api.js');
         const form = new FormData();
-        for (const [name, value] of Object.entries({ name: 'Cloud transport test', phone: '+19990000001', carBrand: 'Test', carModel: 'Cloud form', serviceId: service.id, source: 'website' })) form.set(name, value);
+        for (const [name, value] of Object.entries({ name: 'Cloud transport test', phone: '+79990000001', carBrand: 'Test', carModel: 'Cloud form', serviceId: service.id, source: 'website' })) form.set(name, value);
         const result = await send<{ id: number }>('/requests', form);
         const saved = await db.request.findUniqueOrThrow({ where: { id: result.id } });
         assert.equal(saved.source, 'website');

@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
   useDroppable,
   useDraggable,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
+  KeyboardSensor,
+  DragOverlay,
+  pointerWithin,
+  rectIntersection,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -34,42 +40,60 @@ import {
   Pagination,
 } from '../../frontend/src/components/UI';
 import type { PageData, RequestRecord, Service, User } from '../../frontend/src/services/types';
-import { statuses, statusLabels, sourceLabels } from '../../shared/constants';
+import { statuses, statusLabels, sourceLabels, type RequestStatus } from '../../shared/constants';
 import { carName, dateLabel } from '../../frontend/src/utils/format';
 import BookingForm from '../../public-site/BookingForm';
-function KanbanCard({ record }: { record: RequestRecord }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+import { formatPhone } from '../../shared/phone';
+function CardContent({ record }: { record: RequestRecord }) {
+  return (
+    <>
+      <h3>{carName(record.car)}</h3>
+      <p>{record.service.name}</p>
+      <div className="kanban-client">
+        <span className="avatar small">{record.client.name[0]}</span>
+        <span>
+          {record.client.name}
+          <small>{formatPhone(record.client.phone)}</small>
+        </span>
+      </div>
+    </>
+  );
+}
+type CardProps = {
+  record: RequestRecord;
+  disabled: boolean;
+  mechanic: boolean;
+  onMove: (id: number, status: RequestStatus) => Promise<void>;
+};
+function KanbanCard({ record, disabled, mechanic, onMove }: CardProps) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, isDragging } = useDraggable({
     id: record.id,
+    disabled,
   });
   return (
     <article
       className={`kanban-card ${isDragging ? 'dragging' : ''}`}
       ref={setNodeRef}
-      style={
-        transform ? { transform: `translate3d(${transform.x}px,${transform.y}px,0)` } : undefined
-      }
+      onMouseDown={(event) => listeners?.onMouseDown?.(event)}
     >
       <div className="card-top">
         <span>#{record.id}</span>
         <button
-          {...listeners}
           {...attributes}
+          ref={setActivatorNodeRef}
+          onTouchStart={(event) => listeners?.onTouchStart?.(event)}
+          onKeyDown={(event) => listeners?.onKeyDown?.(event)}
+          type="button"
+          disabled={disabled}
           className="drag-handle"
-          aria-label={`Переместить заявку ${record.id}; статус также можно изменить внутри заявки`}
+          aria-label={`Переместить заявку ${record.id}`}
+          title="Перетащите карточку в другой статус"
         >
           <GripVertical size={16} />
         </button>
       </div>
       <Link to={`/crm/requests/${record.id}`} className="kanban-main">
-        <h3>{carName(record.car)}</h3>
-        <p>{record.service.name}</p>
-        <div className="kanban-client">
-          <span className="avatar small">{record.client.name[0]}</span>
-          <span>
-            {record.client.name}
-            <small>{record.client.phone}</small>
-          </span>
-        </div>
+        <CardContent record={record} />
       </Link>
       <div className="kanban-footer">
         <span>
@@ -79,13 +103,46 @@ function KanbanCard({ record }: { record: RequestRecord }) {
         <span>{sourceLabels[record.source]}</span>
       </div>
       {record.mechanic && <div className="kanban-mechanic">Мастер: {record.mechanic.name}</div>}
+      <select
+        className="kanban-status"
+        aria-label={`Статус заявки ${record.id}`}
+        value={record.status}
+        disabled={disabled}
+        onMouseDown={(event) => event.stopPropagation()}
+        onChange={(event) => void onMove(record.id, event.target.value as RequestStatus)}
+      >
+        {statuses
+          .filter((status) => !mechanic || ['IN_PROGRESS', 'READY', record.status].includes(status))
+          .map((status) => (
+            <option key={status} value={status}>
+              {statusLabels[status]}
+            </option>
+          ))}
+      </select>
     </article>
   );
 }
-function Column({ status, items }: { status: (typeof statuses)[number]; items: RequestRecord[] }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status });
+function Column({
+  status,
+  items,
+  disabled,
+  mechanic,
+  onMove,
+}: {
+  status: RequestStatus;
+  items: RequestRecord[];
+} & Omit<CardProps, 'record'>) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: status,
+    disabled: disabled || (mechanic && !['IN_PROGRESS', 'READY'].includes(status)),
+  });
   return (
-    <section className={`kanban-column ${isOver ? 'over' : ''}`} ref={setNodeRef}>
+    <section
+      className={`kanban-column ${isOver ? 'over' : ''}`}
+      ref={setNodeRef}
+      aria-label={statusLabels[status]}
+      data-status={status}
+    >
       <h2>
         <i className={`column-dot status-${status.toLowerCase()}`} />
         {statusLabels[status]}
@@ -93,7 +150,13 @@ function Column({ status, items }: { status: (typeof statuses)[number]; items: R
       </h2>
       <div className="column-cards">
         {items.map((r) => (
-          <KanbanCard key={r.id} record={r} />
+          <KanbanCard
+            key={r.id}
+            record={r}
+            disabled={disabled}
+            mechanic={mechanic}
+            onMove={onMove}
+          />
         ))}
         {!items.length && <p className="kanban-empty">Нет заявок</p>}
       </div>
@@ -104,6 +167,8 @@ export default function Requests() {
   const [params, setParams] = useSearchParams(),
     [q, setQ] = useState(params.get('q') || ''),
     [view, setView] = useState<'board' | 'list'>('board'),
+    [activeId, setActiveId] = useState<number | null>(null),
+    [movingId, setMovingId] = useState<number | null>(null),
     [newOpen, setNewOpen] = useState(params.has('new'));
   const { user } = useAuth();
   const toast = useToast(),
@@ -126,18 +191,37 @@ export default function Requests() {
     ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
   });
   const resource = useResource<PageData<RequestRecord>>(`/requests?${query}`, 5000);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+    useSensor(KeyboardSensor),
+  );
+  const activeRecord = resource.data?.items.find((record) => record.id === activeId);
   useEffect(() => setPage(1), [searchQ, filters, view]);
   async function move(event: DragEndEvent) {
+    setActiveId(null);
     if (!event.over || !statuses.includes(event.over.id as (typeof statuses)[number])) return;
-    const record = resource.data?.items.find((r) => r.id === event.active.id);
-    if (record?.status === event.over.id) return;
+    await moveTo(Number(event.active.id), event.over.id as RequestStatus);
+  }
+  async function moveTo(id: number, status: RequestStatus) {
+    const record = resource.data?.items.find((r) => r.id === id);
+    if (!record || record.status === status || movingId !== null) return;
+    setMovingId(id);
     try {
-      await send(`/requests/${event.active.id}`, { status: event.over.id }, 'PATCH');
+      await send(`/requests/${id}`, { status }, 'PATCH');
+      resource.setData(
+        (data) =>
+          data && {
+            ...data,
+            items: data.items.map((item) => (item.id === id ? { ...item, status } : item)),
+          },
+      );
       await resource.refresh();
       toast('Статус заявки сохранён');
     } catch (e) {
       toast((e as Error).message, true);
+    } finally {
+      setMovingId(null);
     }
   }
   function closeNew() {
@@ -263,16 +347,49 @@ export default function Requests() {
       {resource.loading ? (
         <Loading />
       ) : view === 'board' ? (
-        <DndContext sensors={sensors} onDragEnd={(event) => void move(event)}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={(args) =>
+            args.pointerCoordinates ? pointerWithin(args) : rectIntersection(args)
+          }
+          onDragStart={(event) => setActiveId(Number(event.active.id))}
+          onDragCancel={() => setActiveId(null)}
+          onDragEnd={(event) => void move(event)}
+          accessibility={{
+            screenReaderInstructions: {
+              draggable:
+                'Нажмите пробел, чтобы взять заявку, стрелки — чтобы переместить, пробел — чтобы отпустить, Escape — чтобы отменить. Также можно выбрать статус прямо на карточке.',
+            },
+          }}
+        >
+          <p className="kanban-hint">
+            Перетащите карточку в нужную колонку или выберите статус на карточке.
+          </p>
           <div className="kanban-board">
             {statuses.map((status) => (
               <Column
                 key={status}
                 status={status}
                 items={resource.data?.items.filter((r) => r.status === status) || []}
+                disabled={movingId !== null}
+                mechanic={user?.role === 'MECHANIC'}
+                onMove={moveTo}
               />
             ))}
           </div>
+          {createPortal(
+            <DragOverlay dropAnimation={null}>
+              {activeRecord && (
+                <article className="kanban-card kanban-overlay" aria-hidden="true">
+                  <div className="card-top">#{activeRecord.id}</div>
+                  <div className="kanban-main">
+                    <CardContent record={activeRecord} />
+                  </div>
+                </article>
+              )}
+            </DragOverlay>,
+            document.body,
+          )}
         </DndContext>
       ) : (
         <div className="panel">
@@ -302,7 +419,7 @@ export default function Requests() {
                     </td>
                     <td>
                       {r.client.name}
-                      <small>{r.client.phone}</small>
+                      <small>{formatPhone(r.client.phone)}</small>
                     </td>
                     <td>{dateLabel(r.preferredDate)}</td>
                     <td>{sourceLabels[r.source]}</td>
@@ -330,9 +447,6 @@ export default function Requests() {
           onChange={setPage}
         />
       )}
-      <p className="hint">
-        Перетащите карточку за значок ⋮⋮ или измените статус в карточке заявки.
-      </p>
       {newOpen && (
         <Modal title="Новая заявка" onClose={closeNew}>
           <BookingForm

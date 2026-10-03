@@ -6,6 +6,7 @@ import { db } from '../utils/db.js';
 import { auth, roles, staffSelect } from '../middleware/auth.js';
 import { asyncRoute, HttpError } from '../utils/errors.js';
 import { phone, text, optionalText, money, pagination, password as passwordSchema } from '../utils/validation.js';
+import { formatPhone } from '../../../shared/phone.js';
 import { audit } from '../services/security.js';
 import { requestInclude } from '../services/requests.js';
 export const clientsRouter = Router();
@@ -320,7 +321,7 @@ settingsRouter.patch(
         data: z
           .object({
             name: text(100),
-            phone: text(50),
+            phone: phone.transform(formatPhone),
             address: text(300),
             hours: text(200),
             email: z.string().email(),

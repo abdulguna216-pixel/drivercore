@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizePhone } from '../../../shared/phone.js';
 export const text = (max = 200) =>
   z
     .string()
@@ -11,9 +12,15 @@ export const text = (max = 200) =>
     );
 export const phone = z
   .string()
-  .transform((v) => v.replace(/[^\d+]/g, ''))
-  .refine((v) => /^\+?\d{10,15}$/.test(v), 'Укажите телефон: от 10 до 15 цифр')
-  .transform((v) => (v.startsWith('+') ? v : `+${v}`));
+  .max(50)
+  .transform((value, ctx) => {
+    const normalized = normalizePhone(value);
+    if (!normalized) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Введите полный номер: +7 (___) ___-__-__ — 10 цифр после +7' });
+      return z.NEVER;
+    }
+    return normalized;
+  });
 export const optionalText = (max = 200) =>
   z
     .string()

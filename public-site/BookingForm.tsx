@@ -4,6 +4,7 @@ import { Button, Field, Select, Textarea, ErrorState } from '../frontend/src/com
 import { send, ApiError } from '../frontend/src/services/api';
 import type { Service } from '../frontend/src/services/types';
 import { localDate } from '../frontend/src/utils/format';
+import { PhoneField } from '../frontend/src/components/PhoneField';
 export default function BookingForm({
   services,
   initialService = '',
@@ -76,15 +77,7 @@ export default function BookingForm({
           maxLength={100}
           error={fields.name?.[0]}
         />
-        <Field
-          label="Телефон"
-          name="phone"
-          type="tel"
-          placeholder="+7 (999) 000-00-00"
-          autoComplete="tel"
-          required
-          error={fields.phone?.[0]}
-        />
+        <PhoneField label="Телефон" name="phone" required error={fields.phone?.[0]} />
         <Field
           label="Марка автомобиля"
           name="carBrand"

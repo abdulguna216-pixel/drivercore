@@ -1833,6 +1833,22 @@ tr:last-child td {
   padding-bottom: 14px;
   overscroll-behavior-x: contain;
 }
+.kanban-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+.kanban-status {
+  width: 100%;
+  margin-top: 12px;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid #dfe4eb;
+  border-radius: 4px;
+  background: #f7f9fb;
+  font-size: 12px;
+  cursor: pointer;
+}
 .kanban-column {
   flex: 0 0 230px;
   background: #eceff3;
@@ -1881,10 +1897,13 @@ tr:last-child td {
   padding: 14px;
   box-shadow: 0 2px 3px #1b202904;
   touch-action: auto;
+  cursor: grab;
 }
 .kanban-card.dragging {
-  z-index: 100;
-  opacity: 0.8;
+  opacity: 0.35;
+}
+.kanban-overlay {
+  cursor: grabbing;
   box-shadow: 0 8px 30px #1b202925;
 }
 .kanban-card:hover {

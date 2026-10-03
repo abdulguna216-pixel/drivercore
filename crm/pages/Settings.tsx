@@ -6,6 +6,7 @@ import { send } from '../../frontend/src/services/api';
 import { PageHeader, Button, Field, Loading, ErrorState } from '../../frontend/src/components/UI';
 import type { Settings as SettingsData } from '../../frontend/src/services/types';
 import { formObject } from '../../frontend/src/utils/format';
+import { PhoneField } from '../../frontend/src/components/PhoneField';
 export default function Settings() {
   const { user } = useAuth(),
     toast = useToast(),
@@ -47,7 +48,7 @@ export default function Settings() {
                   readOnly={!admin}
                   required
                 />
-                <Field
+                <PhoneField
                   label="Телефон"
                   name="phone"
                   defaultValue={resource.data.phone}

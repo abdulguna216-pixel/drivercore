@@ -4,6 +4,7 @@ import { Plus, Edit3, Search } from 'lucide-react';
 import { useResource, useDebounce } from '../../frontend/src/hooks/useResource';
 import { useAuth, useToast } from '../../frontend/src/components/Providers';
 import { send } from '../../frontend/src/services/api';
+import { PhoneField } from '../../frontend/src/components/PhoneField';
 import {
   PageHeader,
   Button,
@@ -327,13 +328,7 @@ export default function Directory({ kind }: { kind: Kind }) {
                       maxLength={100}
                       required
                     />
-                    <Field
-                      label="Телефон"
-                      name="phone"
-                      type="tel"
-                      defaultValue={e?.phone}
-                      required
-                    />
+                    <PhoneField label="Телефон" name="phone" defaultValue={e?.phone} required />
                     <Field label="Email" name="email" type="email" defaultValue={e?.email || ''} />
                   </>
                 );
